@@ -30,6 +30,7 @@ RUN mkdir -p /app/data/review_photos /app/app/ml/weights \
 
 USER appuser
 
+# Keep 8000 fixed. Dokploy Domains → Port must be 8000 (not 3000).
 EXPOSE 8000
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=45s --retries=5 \
