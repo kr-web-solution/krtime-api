@@ -128,6 +128,8 @@ def send_employee_alert(
             employee_id=employee_id,
             alert_type=payload.alert_type.value,
             note=payload.note,
+            title=payload.title,
+            message=payload.message,
             settings=settings,
         )
     except ValueError as exc:
@@ -141,6 +143,7 @@ def send_employee_alert(
         entity_id=str(employee_id),
         after={
             "alert_type": payload.alert_type.value,
+            "title": title,
             "delivered": delivered,
             "note": payload.note,
         },

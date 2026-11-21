@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from uuid import UUID
 
@@ -59,12 +60,21 @@ def publish(
     headers = _headers(s)
     headers["Title"] = title[:200]
     headers["Priority"] = str(max(1, min(5, priority)))
+    # Plain text body: ntfy shows Title header; KRTime parses JSON if present,
+    # otherwise treats body as the notification text (works when app is closed).
+    headers["Content-Type"] = "text/plain; charset=utf-8"
     if tags:
         headers["Tags"] = tags
 
+    # Embed title+message as JSON so KRTime can show a normal system notification.
+    payload = json.dumps(
+        {"title": title[:200], "message": message[:2000]},
+        ensure_ascii=False,
+    ).encode("utf-8")
+
     try:
         with httpx.Client(timeout=8.0) as client:
-            response = client.post(url, content=message.encode("utf-8"), headers=headers)
+            response = client.post(url, content=payload, headers=headers)
             response.raise_for_status()
         return True
     except Exception:
@@ -135,28 +145,43 @@ def send_employee_alert(
     employee_id: UUID,
     alert_type: str,
     note: str | None = None,
+    title: str | None = None,
+    message: str | None = None,
     settings: Settings | None = None,
 ) -> tuple[str, str, int, bool]:
-    """Send a preset alert. Returns (title, message, delivered_count, push_enabled)."""
-    preset = EMPLOYEE_ALERT_PRESETS.get(alert_type)
-    if preset is None:
-        raise ValueError(f"unknown alert_type: {alert_type}")
-    title = str(preset["title"])
-    message = str(preset["message"])
-    if note and note.strip():
-        message = f"{message}\n\nNote: {note.strip()}"
+    """Send a preset or custom alert. Returns (title, message, delivered_count, push_enabled)."""
+    if alert_type == "custom":
+        final_title = (title or "").strip() or "Message from admin"
+        final_message = (message or "").strip()
+        if not final_message:
+            raise ValueError("message is required for custom notifications")
+        if note and note.strip():
+            final_message = f"{final_message}\n\nNote: {note.strip()}"
+        priority = 3
+        tags = "speech_balloon"
+    else:
+        preset = EMPLOYEE_ALERT_PRESETS.get(alert_type)
+        if preset is None:
+            raise ValueError(f"unknown alert_type: {alert_type}")
+        final_title = str(preset["title"])
+        final_message = str(preset["message"])
+        if note and note.strip():
+            final_message = f"{final_message}\n\nNote: {note.strip()}"
+        priority = int(preset["priority"])
+        tags = str(preset["tags"]) if preset.get("tags") else None
+
     s = settings or get_settings()
     enabled = push_enabled(s)
     delivered = notify_employee(
         db,
         employee_id=employee_id,
-        title=title,
-        message=message,
-        priority=int(preset["priority"]),
-        tags=str(preset["tags"]) if preset.get("tags") else None,
+        title=final_title,
+        message=final_message,
+        priority=priority,
+        tags=tags,
         settings=s,
     )
-    return title, message, delivered, enabled
+    return final_title, final_message, delivered, enabled
 
 
 def notify_employee(
