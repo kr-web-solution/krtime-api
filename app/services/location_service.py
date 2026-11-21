@@ -116,3 +116,33 @@ def update_location(
     db.commit()
     db.refresh(location)
     return LocationOut.model_validate(location)
+
+
+def delete_location(
+    db: Session,
+    location_id: UUID,
+    *,
+    actor: User,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+) -> None:
+    location = db.get(Location, location_id)
+    if location is None:
+        raise AppError("location_not_found", "Location not found", status_code=404)
+    if not location.active:
+        raise AppError("location_inactive", "Location is already inactive", status_code=400)
+    before = {"name": location.name, "slug": location.slug, "active": True}
+    location.active = False
+    db.add(location)
+    write_audit(
+        db,
+        actor_user_id=actor.id,
+        action="location.delete",
+        entity_type="location",
+        entity_id=str(location.id),
+        before=before,
+        after={"active": False},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()

@@ -126,3 +126,27 @@ def approve_device(db: Session, device_id, *, actor: User) -> DeviceOut:
     db.commit()
     db.refresh(device)
     return DeviceOut.model_validate(device)
+
+
+def revoke_device(db: Session, device_id, *, actor: User) -> DeviceOut:
+    device = db.get(RegisteredDevice, device_id)
+    if device is None:
+        raise AppError("device_not_found", "Device not found", status_code=404)
+    if device.status == DeviceStatus.REVOKED.value:
+        raise AppError("device_revoked", "Device is already revoked", status_code=400)
+    before = {"status": device.status}
+    device.status = DeviceStatus.REVOKED.value
+    device.revoked_at = datetime.now(UTC)
+    db.add(device)
+    write_audit(
+        db,
+        actor_user_id=actor.id,
+        action="device.revoke",
+        entity_type="registered_device",
+        entity_id=str(device.id),
+        before=before,
+        after={"status": DeviceStatus.REVOKED.value},
+    )
+    db.commit()
+    db.refresh(device)
+    return DeviceOut.model_validate(device)

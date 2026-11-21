@@ -60,6 +60,26 @@ def create_shift(
     return shift
 
 
+def delete_shift(db: Session, *, shift_id: UUID, actor: User) -> None:
+    shift = db.get(Shift, shift_id)
+    if shift is None:
+        raise AppError("shift_not_found", "Shift not found", status_code=404)
+    if not shift.active:
+        raise AppError("shift_inactive", "Shift is already inactive", status_code=400)
+    write_audit(
+        db,
+        actor_user_id=actor.id,
+        action="shift.delete",
+        entity_type="shift",
+        entity_id=str(shift_id),
+        before={"name": shift.name, "active": True},
+        after={"active": False},
+    )
+    shift.active = False
+    db.add(shift)
+    db.commit()
+
+
 def assign_shift(
     db: Session,
     *,

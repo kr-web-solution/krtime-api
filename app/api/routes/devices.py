@@ -87,3 +87,8 @@ def list_devices(db: DbSession, _: AdminUser) -> list[DeviceOut]:
 @router.post("/{device_id}/approve", response_model=DeviceOut)
 def approve_device(device_id: UUID, db: DbSession, actor: SuperAdminUser) -> DeviceOut:
     return device_service.approve_device(db, device_id, actor=actor)
+
+
+@router.delete("/{device_id}", response_model=DeviceOut)
+def revoke_device(device_id: UUID, db: DbSession, actor: SuperAdminUser) -> DeviceOut:
+    return device_service.revoke_device(db, device_id, actor=actor)

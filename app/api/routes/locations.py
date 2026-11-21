@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 
 from app.api.deps import AdminUser, DbSession, SuperAdminUser, client_meta
 from app.schemas.locations import LocationCreate, LocationOut, LocationUpdate
@@ -49,3 +49,16 @@ def update_location(
     return location_service.update_location(
         db, location_id, payload, actor=actor, **client_meta(request)
     )
+
+
+@router.delete("/{location_id}")
+def delete_location(
+    location_id: UUID,
+    request: Request,
+    db: DbSession,
+    actor: SuperAdminUser,
+) -> Response:
+    location_service.delete_location(
+        db, location_id, actor=actor, **client_meta(request)
+    )
+    return Response(status_code=204)

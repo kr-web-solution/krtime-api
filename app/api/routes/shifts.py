@@ -6,7 +6,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import AdminUser, CurrentEmployee, DbSession, SuperAdminUser
 from app.core.config import Settings, get_settings
@@ -47,6 +47,12 @@ def create_shift(payload: ShiftCreate, db: DbSession, actor: SuperAdminUser) -> 
         actor=actor,
     )
     return ShiftOut.model_validate(shift)
+
+
+@router.delete("/{shift_id}")
+def delete_shift(shift_id: UUID, db: DbSession, actor: SuperAdminUser) -> Response:
+    shift_service.delete_shift(db, shift_id=shift_id, actor=actor)
+    return Response(status_code=204)
 
 
 @router.post("/employees/{employee_id}/assign", response_model=ShiftAssignmentOut)

@@ -46,6 +46,16 @@ def my_leave_history(
     return [LeaveRequestOut.model_validate(r) for r in rows]
 
 
+@router.delete("/{request_id}", response_model=LeaveRequestOut)
+def cancel_leave(
+    request_id: UUID,
+    db: DbSession,
+    employee: CurrentEmployee,
+) -> LeaveRequestOut:
+    row = leave_service.cancel_leave(db, request_id=request_id, employee=employee)
+    return LeaveRequestOut.model_validate(row)
+
+
 @router.get("/admin", response_model=list[LeaveRequestOut])
 def admin_list_leave(
     db: DbSession,

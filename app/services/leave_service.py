@@ -141,6 +141,34 @@ def _daterange(start: date, end: date):
         cur += timedelta(days=1)
 
 
+def cancel_leave(
+    db: Session,
+    *,
+    request_id: UUID,
+    employee: Employee,
+) -> LeaveRequest:
+    row = db.get(LeaveRequest, request_id)
+    if row is None or row.employee_id != employee.id:
+        raise AppError("leave_not_found", "Leave request not found", status_code=404)
+    if row.status != LeaveRequestStatus.PENDING.value:
+        raise AppError("leave_not_pending", "Only pending leave can be cancelled", status_code=400)
+    row.status = LeaveRequestStatus.CANCELLED.value
+    row.decided_at = datetime.now(UTC)
+    row.decision_notes = "Cancelled by employee"
+    db.add(row)
+    write_audit(
+        db,
+        actor_user_id=employee.user_id,
+        action="leave.cancel",
+        entity_type="leave_request",
+        entity_id=str(request_id),
+        after={"status": row.status},
+    )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 def decide_leave(
     db: Session,
     *,
