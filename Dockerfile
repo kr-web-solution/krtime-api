@@ -24,7 +24,9 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+# Bake YuNet + SFace into the image (required for face enroll / match).
 RUN mkdir -p /app/data/review_photos /app/app/ml/weights \
+    && python scripts/download_face_models.py \
     && chmod +x /app/scripts/entrypoint.sh \
     && chown -R appuser:appuser /app
 
