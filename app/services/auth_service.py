@@ -46,6 +46,7 @@ def build_token_pair(db: Session, user: User, settings: Settings) -> tuple[Token
         user_id=user.id,
         employee_id=employee_id,
         full_name=user.full_name,
+        refresh_token=refresh_raw,
     )
     return out, refresh_raw
 

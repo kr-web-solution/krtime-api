@@ -5,13 +5,16 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
 from app.api.deps import AdminUser, CurrentEmployee, CurrentUser, DbSession, SuperAdminUser, client_meta
+from app.core.config import Settings, get_settings
+from app.core.errors import AppError
 from app.models import Employee
+from app.schemas.alerts import EmployeeAlertOut, EmployeeAlertRequest
 from app.schemas.employees import (
     EmployeeCreate,
     EmployeeMeOut,
@@ -19,7 +22,8 @@ from app.schemas.employees import (
     EmployeeUpdate,
     EnrollmentCodeOut,
 )
-from app.services import employee_service
+from app.services import employee_service, notification_service
+from app.services.audit import write_audit
 
 router = APIRouter()
 
@@ -104,4 +108,63 @@ def create_enrollment_code(
 ) -> EnrollmentCodeOut:
     return employee_service.create_enrollment_code_for_employee(
         db, employee_id, actor=actor, hours=payload.hours
+    )
+
+
+@router.post("/{employee_id}/alerts", response_model=EmployeeAlertOut)
+def send_employee_alert(
+    employee_id: UUID,
+    payload: EmployeeAlertRequest,
+    db: DbSession,
+    actor: AdminUser,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EmployeeAlertOut:
+    employee = db.get(Employee, employee_id)
+    if employee is None or not employee.is_active:
+        raise AppError("employee_not_found", "Employee not found", status_code=404)
+    try:
+        title, message, delivered, enabled = notification_service.send_employee_alert(
+            db,
+            employee_id=employee_id,
+            alert_type=payload.alert_type.value,
+            note=payload.note,
+            settings=settings,
+        )
+    except ValueError as exc:
+        raise AppError("invalid_alert", str(exc), status_code=400) from exc
+
+    write_audit(
+        db,
+        actor_user_id=actor.id,
+        action="employee.alert",
+        entity_type="employee",
+        entity_id=str(employee_id),
+        after={
+            "alert_type": payload.alert_type.value,
+            "delivered": delivered,
+            "note": payload.note,
+        },
+    )
+    db.commit()
+
+    if not enabled:
+        raise AppError(
+            "push_disabled",
+            "Push notifications are not configured on the server (NTFY_BASE_URL)",
+            status_code=503,
+        )
+    if delivered == 0:
+        raise AppError(
+            "no_subscription",
+            "Employee has no push subscription. Ask them to open KRTime and subscribe in ntfy.",
+            status_code=409,
+        )
+
+    return EmployeeAlertOut(
+        employee_id=str(employee_id),
+        alert_type=payload.alert_type,
+        title=title,
+        message=message,
+        delivered=delivered,
+        push_enabled=enabled,
     )

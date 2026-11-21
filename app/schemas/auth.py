@@ -15,3 +15,7 @@ class EnrollWithCodeRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=128)
     full_name: str = Field(min_length=2, max_length=160)
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str | None = Field(default=None, min_length=16, max_length=512)

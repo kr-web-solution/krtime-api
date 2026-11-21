@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings
+from app.core.errors import AppError
 from app.models import (
     AttendanceRecord,
     AttendanceRecordStatus,
@@ -23,6 +24,7 @@ from app.schemas.daily_attendance import (
     DailyAttendanceLocationOut,
     DailyAttendanceOut,
 )
+from app.services.audit import write_audit
 
 
 def _business_today(settings: Settings) -> date:
@@ -157,3 +159,37 @@ def daily_attendance_board(db: Session, settings: Settings) -> DailyAttendanceOu
         outside_count=outside_total,
         locations=location_blocks,
     )
+
+
+def delete_attendance_record(
+    db: Session,
+    *,
+    record_id: UUID,
+    actor: User,
+) -> None:
+    """Remove a daily summary row. Append-only attendance_events are kept for audit."""
+    record = db.get(AttendanceRecord, record_id)
+    if record is None:
+        raise AppError("attendance_not_found", "Attendance record not found", status_code=404)
+    if record.month_locked:
+        raise AppError(
+            "month_locked",
+            "This attendance day is month-locked and cannot be deleted",
+            status_code=409,
+        )
+    write_audit(
+        db,
+        actor_user_id=actor.id,
+        action="attendance.delete",
+        entity_type="attendance_record",
+        entity_id=str(record_id),
+        before={
+            "employee_id": str(record.employee_id),
+            "work_date": record.work_date.isoformat(),
+            "status": record.status,
+            "check_in_at": record.check_in_at.isoformat() if record.check_in_at else None,
+            "check_out_at": record.check_out_at.isoformat() if record.check_out_at else None,
+        },
+    )
+    db.delete(record)
+    db.commit()

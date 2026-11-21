@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
-from app.api.deps import AdminUser, DbSession
+from app.api.deps import AdminUser, DbSession, SuperAdminUser
 from app.core.config import Settings, get_settings
 from app.schemas.daily_attendance import DailyAttendanceOut
 from app.schemas.dashboard import DashboardOut
@@ -31,3 +32,15 @@ def get_daily_attendance(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> DailyAttendanceOut:
     return daily_attendance_service.daily_attendance_board(db, settings)
+
+
+@router.delete("/daily-attendance/{record_id}")
+def delete_daily_attendance(
+    record_id: UUID,
+    db: DbSession,
+    actor: SuperAdminUser,
+) -> Response:
+    daily_attendance_service.delete_attendance_record(
+        db, record_id=record_id, actor=actor
+    )
+    return Response(status_code=204)

@@ -12,7 +12,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.security import decode_token
 from app.models import User
-from app.schemas.auth import EnrollWithCodeRequest, LoginRequest
+from app.schemas.auth import EnrollWithCodeRequest, LoginRequest, RefreshRequest
 from app.schemas.common import MessageOut, TokenPairOut, UserBriefOut
 from app.services import auth_service
 from app.services.rate_limit import check_rate_limit
@@ -88,10 +88,12 @@ def refresh(
     response: Response,
     db: DbSession,
     settings: Annotated[Settings, Depends(get_settings)],
+    payload: RefreshRequest = RefreshRequest(),
 ) -> TokenPairOut:
-    refresh_raw = request.cookies.get(settings.refresh_cookie_name)
+    # Prefer body (mobile); fall back to httpOnly cookie (admin browser).
+    refresh_raw = payload.refresh_token or request.cookies.get(settings.refresh_cookie_name)
     if not refresh_raw:
-        raise AppError("missing_refresh", "Refresh cookie missing", status_code=401)
+        raise AppError("missing_refresh", "Refresh token missing", status_code=401)
     meta = client_meta(request)
     tokens, new_refresh = auth_service.refresh_session(
         db,

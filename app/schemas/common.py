@@ -25,6 +25,9 @@ class TokenPairOut(BaseModel):
     user_id: UUID
     employee_id: UUID | None = None
     full_name: str
+    # Returned for native mobile clients (cookie may be stripped by proxies).
+    # Admin browser continues to use the httpOnly refresh cookie.
+    refresh_token: str | None = None
 
 
 class UserBriefOut(ORMModel):

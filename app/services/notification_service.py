@@ -94,6 +94,71 @@ def notify_admin(
     )
 
 
+# Preset admin → employee alerts (used by admin Employees page).
+EMPLOYEE_ALERT_PRESETS: dict[str, dict[str, object]] = {
+    "check_in": {
+        "title": "Check in now",
+        "message": "Please check in on KRTime.",
+        "priority": 4,
+        "tags": "alarm_clock",
+    },
+    "check_out": {
+        "title": "Check out now",
+        "message": "Please check out on KRTime.",
+        "priority": 4,
+        "tags": "door",
+    },
+    "return_site": {
+        "title": "Return to site",
+        "message": "Please return to your assigned workplace.",
+        "priority": 5,
+        "tags": "round_pushpin,warning",
+    },
+    "call_admin": {
+        "title": "Contact admin",
+        "message": "Please contact your admin as soon as possible.",
+        "priority": 4,
+        "tags": "telephone_receiver",
+    },
+    "urgent": {
+        "title": "Urgent alert",
+        "message": "Urgent: please open KRTime and respond immediately.",
+        "priority": 5,
+        "tags": "rotating_light,warning",
+    },
+}
+
+
+def send_employee_alert(
+    db: Session,
+    *,
+    employee_id: UUID,
+    alert_type: str,
+    note: str | None = None,
+    settings: Settings | None = None,
+) -> tuple[str, str, int, bool]:
+    """Send a preset alert. Returns (title, message, delivered_count, push_enabled)."""
+    preset = EMPLOYEE_ALERT_PRESETS.get(alert_type)
+    if preset is None:
+        raise ValueError(f"unknown alert_type: {alert_type}")
+    title = str(preset["title"])
+    message = str(preset["message"])
+    if note and note.strip():
+        message = f"{message}\n\nNote: {note.strip()}"
+    s = settings or get_settings()
+    enabled = push_enabled(s)
+    delivered = notify_employee(
+        db,
+        employee_id=employee_id,
+        title=title,
+        message=message,
+        priority=int(preset["priority"]),
+        tags=str(preset["tags"]) if preset.get("tags") else None,
+        settings=s,
+    )
+    return title, message, delivered, enabled
+
+
 def notify_employee(
     db: Session,
     *,
