@@ -7,7 +7,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import Settings
 from app.models import (
@@ -52,7 +52,11 @@ def list_check_in_alerts(db: Session, settings: Settings) -> list[dict]:
     if shift_service.is_holiday(db, today, location_id=None) is not None:
         return []
 
-    employees = db.scalars(select(Employee).where(Employee.is_active.is_(True))).all()
+    employees = db.scalars(
+        select(Employee)
+        .where(Employee.is_active.is_(True))
+        .options(joinedload(Employee.user))
+    ).unique().all()
     for emp in employees:
         record = records_today.get(emp.id)
         if record and record.status == AttendanceRecordStatus.ON_LEAVE.value:
@@ -69,6 +73,7 @@ def list_check_in_alerts(db: Session, settings: Settings) -> list[dict]:
 
         start, end = shift_service.shift_bounds(shift, today, settings=settings)
         late_after = start + timedelta(minutes=shift.grace_late_minutes)
+        full_name = emp.user.full_name if emp.user else emp.employee_code
 
         # Already checked in late
         if record and record.check_in_at is not None and record.is_late:
@@ -79,14 +84,14 @@ def list_check_in_alerts(db: Session, settings: Settings) -> list[dict]:
             alerts.append(
                 {
                     "employee_id": str(emp.id),
-                    "full_name": emp.full_name,
+                    "full_name": full_name,
                     "employee_code": emp.employee_code,
                     "kind": "late",
                     "shift_name": shift.name,
                     "scheduled_start": start.isoformat(),
                     "check_in_at": check_in_at.isoformat(),
                     "minutes_over": minutes_over,
-                    "message": f"{emp.full_name} checked in late ({minutes_over} min after shift start).",
+                    "message": f"{full_name} checked in late ({minutes_over} min after shift start).",
                 }
             )
             continue
@@ -103,14 +108,14 @@ def list_check_in_alerts(db: Session, settings: Settings) -> list[dict]:
             alerts.append(
                 {
                     "employee_id": str(emp.id),
-                    "full_name": emp.full_name,
+                    "full_name": full_name,
                     "employee_code": emp.employee_code,
                     "kind": "missed",
                     "shift_name": shift.name,
                     "scheduled_start": start.isoformat(),
                     "check_in_at": None,
                     "minutes_over": minutes_over,
-                    "message": f"{emp.full_name} did not check in for {shift.name}.",
+                    "message": f"{full_name} did not check in for {shift.name}.",
                 }
             )
             continue
@@ -119,7 +124,7 @@ def list_check_in_alerts(db: Session, settings: Settings) -> list[dict]:
         alerts.append(
             {
                 "employee_id": str(emp.id),
-                "full_name": emp.full_name,
+                "full_name": full_name,
                 "employee_code": emp.employee_code,
                 "kind": "missed",
                 "shift_name": shift.name,
@@ -127,7 +132,7 @@ def list_check_in_alerts(db: Session, settings: Settings) -> list[dict]:
                 "check_in_at": None,
                 "minutes_over": minutes_over,
                 "message": (
-                    f"{emp.full_name} has not checked in — "
+                    f"{full_name} has not checked in — "
                     f"{minutes_over} min past {shift.name} start."
                 ),
             }
@@ -215,8 +220,9 @@ def log_late_checkin(
     ):
         return
     name = shift_name or "shift"
+    full_name = employee.user.full_name if employee.user else employee.employee_code
     message = (
-        f"{employee.full_name} checked in late for {name} "
+        f"{full_name} checked in late for {name} "
         f"({minutes_over} min after start)."
     )
     db.add(

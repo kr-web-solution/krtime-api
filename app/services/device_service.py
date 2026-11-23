@@ -103,6 +103,22 @@ def request_device_reset(
     return DeviceOut.model_validate(device)
 
 
+def get_my_active_device(db: Session, employee: Employee) -> DeviceOut:
+    device = db.scalar(
+        select(RegisteredDevice)
+        .where(
+            RegisteredDevice.employee_id == employee.id,
+            RegisteredDevice.status.in_(
+                [DeviceStatus.ACTIVE.value, DeviceStatus.PENDING.value]
+            ),
+        )
+        .order_by(RegisteredDevice.registered_at.desc())
+    )
+    if device is None:
+        raise AppError("device_not_found", "No active device registered", status_code=404)
+    return DeviceOut.model_validate(device)
+
+
 def list_devices_for_admin(db: Session) -> list[DeviceOut]:
     rows = db.scalars(select(RegisteredDevice).order_by(RegisteredDevice.registered_at.desc())).all()
     return [DeviceOut.model_validate(row) for row in rows]

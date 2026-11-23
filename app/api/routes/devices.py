@@ -46,6 +46,12 @@ def reset_request(
     )
 
 
+@router.get("/me", response_model=DeviceOut)
+def my_device(db: DbSession, employee: CurrentEmployee) -> DeviceOut:
+    """Current employee's active/pending device — used by mobile to detect stale local ids."""
+    return device_service.get_my_active_device(db, employee)
+
+
 @router.get("/push-config", response_model=PushConfigOut)
 def push_config(_: CurrentEmployee) -> PushConfigOut:
     settings = get_settings()
