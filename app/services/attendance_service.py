@@ -41,7 +41,7 @@ from app.schemas.attendance import (
     PresencePingRequest,
     TodayStatusOut,
 )
-from app.services import leave_service, notification_service, qr_service, shift_service
+from app.services import checkin_alert_service, leave_service, notification_service, qr_service, shift_service
 from app.services.device_crypto import canonical_attendance_message, verify_ecdsa_p256_signature
 from app.services.face_verifier import FaceCheckResult, StoredEmbeddingFaceVerifier
 from app.services.geo import haversine_m
@@ -673,6 +673,30 @@ def submit_attendance(
             delta = event.server_timestamp - open_record.check_in_at
             open_record.worked_minutes = int(delta.total_seconds() // 60)
         db.add(open_record)
+
+    if (
+        challenge.purpose == "check_in"
+        and window.is_late
+        and outcome in {AttendanceOutcome.ACCEPTED.value, AttendanceOutcome.PENDING_REVIEW.value}
+    ):
+        shift_name = window.shift.name if window.shift else None
+        start_bound = None
+        if window.shift is not None:
+            start_bound, _ = shift_service.shift_bounds(window.shift, today, settings=settings)
+        minutes_over = 0
+        if start_bound is not None:
+            check_ts = event.server_timestamp
+            if check_ts.tzinfo is None:
+                check_ts = check_ts.replace(tzinfo=start_bound.tzinfo)
+            minutes_over = max(0, int((check_ts - start_bound).total_seconds() // 60))
+        checkin_alert_service.log_late_checkin(
+            db,
+            employee=employee,
+            shift_name=shift_name,
+            check_in_at=event.server_timestamp,
+            minutes_over=minutes_over,
+            settings=settings,
+        )
 
     db.commit()
     db.refresh(event)

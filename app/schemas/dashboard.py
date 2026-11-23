@@ -12,6 +12,18 @@ class SitePresenceOut(BaseModel):
     present: int
 
 
+class CheckInAlertOut(BaseModel):
+    employee_id: str
+    full_name: str
+    employee_code: str
+    kind: str  # late | missed
+    shift_name: str
+    scheduled_start: str
+    check_in_at: str | None = None
+    minutes_over: int
+    message: str
+
+
 class DashboardOut(BaseModel):
     work_date: str
     timezone: str
@@ -26,5 +38,7 @@ class DashboardOut(BaseModel):
     pending_review: int
     suspicious_events: int
     geofence_exits_today: int
+    check_in_alerts_count: int
     devices_needing_attention: int
     by_site: list[SitePresenceOut]
+    check_in_alerts: list[CheckInAlertOut]

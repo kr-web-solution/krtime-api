@@ -20,6 +20,7 @@ from app.models import (
     RegisteredDevice,
     SecurityEvent,
 )
+from app.services.checkin_alert_service import list_check_in_alerts
 
 
 def _business_today(settings: Settings) -> date:
@@ -125,6 +126,8 @@ def dashboard_summary(db: Session, settings: Settings) -> dict:
         )
     ) or 0
 
+    check_in_alerts = list_check_in_alerts(db, settings)
+
     return {
         "work_date": today.isoformat(),
         "timezone": settings.business_timezone,
@@ -139,6 +142,8 @@ def dashboard_summary(db: Session, settings: Settings) -> dict:
         "pending_review": pending_review,
         "suspicious_events": suspicious,
         "geofence_exits_today": geofence_exits,
+        "check_in_alerts_count": len(check_in_alerts),
         "devices_needing_attention": devices_pending,
         "by_site": by_site,
+        "check_in_alerts": check_in_alerts,
     }

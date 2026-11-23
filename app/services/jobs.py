@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models import FaceVerificationAttempt, SystemSetting
+from app.services.checkin_alert_service import flag_missed_checkins
 from app.services.correction_service import flag_forgotten_checkouts
 
 logger = logging.getLogger("attendguard.jobs")
@@ -73,16 +74,31 @@ def forgotten_checkout_tick() -> None:
         db.close()
 
 
+def missed_checkin_tick() -> None:
+    settings = get_settings()
+    db = SessionLocal()
+    try:
+        created = flag_missed_checkins(db, settings)
+        if created:
+            logger.info("Missed check-in alerts created: %s", created)
+    except Exception:  # noqa: BLE001
+        logger.exception("missed check-in job failed")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def start_scheduler() -> BackgroundScheduler:
     global _scheduler
     if _scheduler is not None:
         return _scheduler
     sched = BackgroundScheduler(timezone="UTC")
     sched.add_job(forgotten_checkout_tick, "interval", minutes=15, id="forgotten_checkout")
+    sched.add_job(missed_checkin_tick, "interval", minutes=5, id="missed_checkin")
     sched.add_job(purge_expired_review_photos, "interval", hours=6, id="purge_review_photos")
     sched.start()
     _scheduler = sched
-    logger.info("APScheduler started (forgotten checkout + review purge)")
+    logger.info("APScheduler started (forgotten checkout + missed check-in + review purge)")
     return sched
 
 
